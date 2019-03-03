@@ -98,13 +98,13 @@ function ConvertTo-Cson
             if ($item -is [array]) {
                 # handle arrays, iterate through the items in the array
                 foreach ($subitem in $item) {
-                    if ($subitem -isnot [valuetype] -and $subitem -isnot [string]) {
+                    if ($subitem -is [valuetype] -or $subitem -is [string]) {
+                        writevalue $subitem "$indention$Indent"
+                    }
+                    else {
                         "$indention$indent{"
                         writeproperty $null $subitem "$indention$Indent" ($level + 1)
                         "$indention$Indent}"
-                    }
-                    else {
-                        writevalue $subitem "$indention$Indent"
                     }
                 }
                 "$indention]"
