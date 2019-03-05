@@ -58,19 +58,19 @@ function ConvertTo-Cson {
     function writePropertyName ([string]$value, [bool]$isArray) {
         # write an property name, processed as required for CSON
         # the purpose of making this a function, is a single place to change the escaping function used
-        $(
+        "$(
             if ($match_isNotSimpPropName.IsMatch($value)) {
                 # property name requires escaping
-                "$(writeStringValue $value)"
-            }
+                writeStringValue $value
+            } 
             else {
                 $value
             }
-        ) + ':' + $(
+        ):$(
             if ($isArray) {
                 " ["
             }
-        )
+        )"
     }
     function writeproperty ([string]$name, $item, [string]$indention, [int32]$level) {
         # writing the property may require recursively breaking down the objects based on their type
@@ -78,12 +78,12 @@ function ConvertTo-Cson {
         function writevalue ($item, [string]$indention) {
             # write a property value
 
-            if (($item -is [string]) -or ($item -is [char])) {
-                # handle strings or characters
-                "$indention$(writeStringValue $item)"
-            }
-            else {
-                "$indention$(
+            "$indention$(
+                if (($item -is [string]) -or ($item -is [char])) {
+                    # handle strings or characters
+                    writeStringValue $item
+                }
+                else {
                     if ($item -is [boolean]) {
                         # handle boolean type
                         if ($item) {
@@ -92,15 +92,18 @@ function ConvertTo-Cson {
                         else {
                             "false"
                         }
-                    } elseif ($item -isnot [enum]) {
+                    } 
+                    elseif ($item -isnot [enum]) {
                         "$item"
-                    } elseif ($EnumsAsStrings) {
+                    } 
+                    elseif ($EnumsAsStrings) {
                         writeStringValue ($item.ToString())
-                    } else {
+                    } 
+                    else {
                         "$($item.value__)"
                     }
-                )"
-            }
+                }
+            )"
         }
 
         if ($level -le $Depth) {
