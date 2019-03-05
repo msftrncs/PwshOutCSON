@@ -1,41 +1,65 @@
 # write out an object in CSON notation.
 
 # define a function to create a CSON document, trying to keep it as generic as possible
-function ConvertTo-Cson
-(
-    [Parameter(Mandatory = $true,
-        ValueFromPipeline = $true,
-        ValueFromPipelineByPropertyName = $true)]
-    [AllowEmptyCollection()]
-    [AllowNull()]
-    [AllowEmptyString()]
-    [object]$InputObject,
+function ConvertTo-Cson {
+    param(
+        [Parameter(Mandatory = $true,
+            ValueFromPipeline = $true,
+            ValueFromPipelineByPropertyName = $true)]
+        [AllowEmptyCollection()]
+        [AllowEmptyString()]
+        [AllowNull()]
+        [object]$InputObject,
 
-    [ValidateNotNull()]
-    [string]$Indent = "`t",
+        [string]$Indent = "`t",
 
-    [ValidateRange(1, 100)]
-    [int32]$Depth = 2,
+        [ValidateRange(1, 100)]
+        [int32]$Depth = 2,
 
-    [switch]$EnumsAsStrings
-) {
+        [switch]$EnumsAsStrings
+    )
     # write out a CSON document from the object supplied
     # $InputObject is an object, who's properties will be output as CSON.  Hash tables are supported.
     # $Indent is a string representing the indentation to use.
     #   Typically use "`t" or "  ".
 
+    # define a REGEX match for simple property names
+    $match_isNotSimpPropName = [regex]::new('[^\p{L}\d_]|^\d')
+    # define a REGEX match for characters or patterns that need escaped
+    $escape_matcher = [regex]::new('([\x00-\x1F\x85\u2028\u2029])|([\\"]|#\{)')
+    # define a match evaluator for escaping characters
+    $escape_replacer = {
+        switch ($args[0]) {
+            {$_.Groups[1].Success} {
+                # group 1, control characters
+                switch ($_.Value[0]) {
+                    ([char]8) {'\b'}
+                    ([char]9) {'\t'}
+                    ([char]10) {'\n'}
+                    ([char]12) {'\f'}
+                    ([char]13) {'\r'}
+                    default {'\u{0:X4}' -f [int16]$_}
+                }
+            }
+            {$_.Groups[2].Success} {
+                # group 2, items that need `\` escape
+                "\$($_.Value)"
+            }
+        }
+    }
+
     function writeStringValue ([string]$value) {
         # write an escaped CSON string property value
         # the purpose of making this a function, is a single place to change the escaping function used
         # TODO: escape more characters!
-        """$($value -replace '\\', '\\' -replace '"', '\"' -replace '\n', '\n' -replace '\t', '\t' -replace '#\{', '\#{')"""
+        """$($escape_matcher.replace($value, $escape_replacer))"""
     }
 
     function writePropertyName ([string]$value, [bool]$isArray) {
         # write an property name, processed as required for CSON
         # the purpose of making this a function, is a single place to change the escaping function used
         $(
-            if ($value -match '[^\p{L}\d_]|^\d') {
+            if ($match_isNotSimpPropName.IsMatch($value)) {
                 # property name requires escaping
                 "$(writeStringValue $value)"
             }
@@ -58,7 +82,7 @@ function ConvertTo-Cson
                 # handle strings or characters
                 "$indention$(writeStringValue $item)"
             }
-            else <#if ($item -is [ValueType]) #> {
+            else {
                 "$indention$(
                     if ($item -is [boolean]) {
                         # handle boolean type
