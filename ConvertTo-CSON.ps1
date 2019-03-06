@@ -1,6 +1,30 @@
-# write out an object in CSON notation.
-
-# define a function to create a CSON document, trying to keep it as generic as possible
+<#
+.SYNOPSIS
+    Convert a PowerShell object to a CSON (Coffee Script) representation in a string.
+.DESCRIPTION
+    Converts a PowerShell object to a CSON (Coffee Script) notation as a string.
+.PARAMETER InputObject
+    The input PowerShell object to be represented in a CSON notation.  This parameter may be received from the pipeline.
+.PARAMETER Indent
+    Specifies a string value to be used for each level of the indention within the CSON document.
+.PARAMETER Depth
+    Specifies the maximum depth of recursion permitted for the input object.
+.PARAMETER EnumsAsStrings
+    A switch that specifies an alternate serialization option that converts all enumerations to their string representations.
+.EXAMPLE
+    $grammar_json | ConvertTo-Plist -Indent "`t" -StateEncodingAs 'UTF-8' | Set-Content 'out\PowerShellSyntax.tmLanguage' -Encoding 'UTF8'
+.INPUTS
+    [object] - any PowerShell object.
+.OUTPUTS
+    [string] - the input object returned in a CSON notation.
+.NOTES
+    Script / Function / Class assembled by Carl Morris, Morris Softronics, Hooper, NE, USA
+    Initial release - Mar 3, 2019
+.LINK
+    https://github.com/msftrncs/PwshOutCSON/
+.FUNCTIONALITY
+    data format conversion
+#>
 function ConvertTo-Cson {
     param(
         [Parameter(Mandatory = $true,
@@ -23,13 +47,9 @@ function ConvertTo-Cson {
     # $Indent is a string representing the indentation to use.
     #   Typically use "`t" or "  ".
 
-    # define a REGEX match for simple property names
-    $match_isNotSimpPropName = [regex]::new('[^\p{L}\d_]|^\d')
-    # define a REGEX match for characters or patterns that need escaped
-    $escape_matcher = [regex]::new('([\x00-\x1F\x85\u2028\u2029])|([\\"]|#\{)')
     # define a match evaluator for escaping characters
     $escape_replacer = {
-        switch ($args[0]) {
+        switch ($_) {
             {$_.Groups[1].Success} {
                 # group 1, control characters
                 switch ($_.Value[0]) {
@@ -52,14 +72,15 @@ function ConvertTo-Cson {
         # write an escaped CSON string property value
         # the purpose of making this a function, is a single place to change the escaping function used
         # TODO: escape more characters!
-        """$($escape_matcher.replace($value, $escape_replacer))"""
+        """$($value -replace '([\x00-\x1F\x85\u2028\u2029])|([\\"]|#\{)', $escape_replacer)"""
     }
 
     function writePropertyName ([string]$value, [bool]$isArray) {
         # write an property name, processed as required for CSON
         # the purpose of making this a function, is a single place to change the escaping function used
         "$(
-            if ($match_isNotSimpPropName.IsMatch($value)) {
+            # if a property name is not all simple characters or start with numeric digit, it must be quoted and escaped
+            if ($value -match '[^\p{L}\d_]|^\d') {
                 # property name requires escaping
                 writeStringValue $value
             } 
@@ -68,16 +89,17 @@ function ConvertTo-Cson {
             }
         ):$(
             if ($isArray) {
-                " ["
+                ' ['
             }
         )"
     }
-    function writeproperty ([string]$name, $item, [string]$indention, [int32]$level) {
+
+    function writeProperty ([string]$name, $item, [string]$indention, [int32]$level) {
         # writing the property may require recursively breaking down the objects based on their type
         # name of the property is optional, but that is only intended for the first property object
-        function writevalue ($item, [string]$indention) {
-            # write a property value
 
+        function writeValue ($item, [string]$indention) {
+            # write a property value
             "$indention$(
                 if (($item -is [string]) -or ($item -is [char])) {
                     # handle strings or characters
@@ -87,10 +109,10 @@ function ConvertTo-Cson {
                     if ($item -is [boolean]) {
                         # handle boolean type
                         if ($item) {
-                            "true"
+                            'true'
                         }
                         else {
-                            "false"
+                            'false'
                         }
                     } 
                     elseif ($item -isnot [enum]) {
@@ -109,16 +131,20 @@ function ConvertTo-Cson {
         if ($level -le $Depth) {
             # write out key name, if one was supplied from the parent object
             if ($name) {
-                "$indention$(writePropertyName $name ($item -is [array]))" + $(
-                    if ($item -is [ValueType] -or $item -is [string]) {" $(writevalue $item """")"}
-                )
+                "$indention$(
+                    writePropertyName $name ($item -is [array])
+                )$(
+                    if ($item -is [ValueType] -or $item -is [string]) {
+                        " $(writeValue $item '')"
+                    }
+                )"
             }
             else {
                 if ($item -is [array]) {
                     "$indention[" # add array start token if property is an array
                 }
                 elseif ($item -is [valuetype] -or $item -is [string]) {
-                    writevalue $item "$indention"
+                    writeValue $item "$indention"
                 }
             }
 
@@ -126,21 +152,21 @@ function ConvertTo-Cson {
                 # handle arrays, iterate through the items in the array
                 foreach ($subitem in $item) {
                     if ($subitem -is [valuetype] -or $subitem -is [string]) {
-                        writevalue $subitem "$indention$Indent"
+                        writeValue $subitem "$indention$Indent"
                     }
                     else {
                         "$indention$indent{"
-                        writeproperty $null $subitem "$indention$Indent" ($level + 1)
+                        writeProperty $null $subitem "$indention$Indent" ($level + 1)
                         "$indention$Indent}"
                     }
                 }
                 "$indention]"
             }
             elseif ($item -isnot [valuetype] -and $item -isnot [string]) {
-                # handle objects by recursing with writeproperty
+                # handle objects by recursing with writeProperty
                 # iterate through the items (force to a PSCustomObject for consistency)
                 foreach ($property in ([PSCustomObject]$item).psobject.Properties) {
-                    writeproperty $property.Name $property.Value $(if ($level -ge 0) {"$indention$Indent"} else {$indention}) ($level + 1)
+                    writeProperty $property.Name $property.Value $(if ($level -ge 0) {"$indention$Indent"} else {$indention}) ($level + 1)
                 }
             }
         }
@@ -151,5 +177,5 @@ function ConvertTo-Cson {
     }
 
     # start writing the property list, the property list should be an object, has no name, and starts at base level
-    (writeproperty $null $InputObject "" (-1)) -join "`r`n"
+    (writeProperty $null $InputObject '' (-1)) -join "`r`n"
 }
