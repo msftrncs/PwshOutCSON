@@ -7,20 +7,20 @@ Intended to aid in the conversion of tmLanguage grammar definitions to CSON form
 Example based on JSON tmLanguage file.
 
 ```PowerShell
-Get-Content "powershell.tmlanguage.json" | ConvertFrom-Json |
-    ConvertTo-Cson -Indent "`t" -Depth 100 |
-    Set-Content 'grammars\PowerShell.cson' -Encoding 'UTF8'
+Get-Content powershell.tmlanguage.json | ConvertFrom-Json |
+    ConvertTo-Cson -Indent `t -Depth 100 |
+    Set-Content grammars\PowerShell.cson -Encoding UTF8
 ```
 
 ```PowerShell
-$grammar_json = Get-Content "powershell.tmlanguage.json" | ConvertFrom-Json
-ConvertTo-Cson $grammar_json -Indent "`t" -Depth 100 |
-    Set-Content 'grammars\PowerShell.cson' -Encoding 'UTF8'
+$grammar_json = Get-Content powershell.tmlanguage.json | ConvertFrom-Json
+ConvertTo-Cson $grammar_json -Indent `t -Depth 100 |
+    Set-Content grammars\PowerShell.cson -Encoding UTF8
 ```
 
 ```PowerShell
-$grammar_cson_doc = Get-Content "powershell.tmlanguage.json" | ConvertFrom-Json |
-    ConvertTo-Cson -Indent "`t" -Depth 100
+$grammar_cson_doc = Get-Content powershell.tmlanguage.json | ConvertFrom-Json |
+    ConvertTo-Cson -Indent `t -Depth 100
 ```
 
 ### Parameters
@@ -31,7 +31,7 @@ The PowerShell object which possesses the items to be output in CSON notation.  
 
 #### Indent
 
-Specifies the indentation to use when generating the CSON output.  The default is ```"`t"``` (tab), but other usual options are `''` (none), `'    '` (4 spaces), but otherwise any string is accepted, and no escaping is performed.
+Specifies the indentation to use when generating the CSON output.  The default is ``` `t ``` (tab), but other usual options are `''` (none), `'    '` (4 spaces), but otherwise any string is accepted, and no escaping is performed.
 
 #### Depth
 
@@ -47,4 +47,4 @@ The output of this function is a string (`[string]`).  Use Out-File or Set-Conte
 
 Note:
 - The CSON serialization is only as complete as was required for tmLanguage grammar files that were tested.
-- Minimal escaping has been programmed so far.
+- Minimal escaping has been programmed so far.  Everything that `ConvertTo-JSON` escapes is escaped here, in addition to `#{`.

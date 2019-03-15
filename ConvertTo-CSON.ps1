@@ -53,13 +53,15 @@ function ConvertTo-Cson {
             {$_.Groups[1].Success} {
                 # group 1, control characters
                 switch ($_.Value[0]) {
-                    ([char]8) {'\b'}
-                    ([char]9) {'\t'}
-                    ([char]10) {'\n'}
-                    ([char]12) {'\f'}
-                    ([char]13) {'\r'}
-                    default {'\u{0:X4}' -f [int16]$_}
+                    <# appearing in order of expected frequency, from most frequent to least frequent #>
+                    ([char]10) {'\n'; continue} # new line
+                    ([char]9) {'\t'; continue}  # tab
+                    ([char]13) {'\r'; continue} # caridge return
+                    ([char]12) {'\f'; continue} # new form
+                    ([char]8) {'\b'; continue}  # bell
+                    default {'\u{0:X4}' -f [int16]$_}   # unicode escape all others
                 }
+                continue
             }
             {$_.Groups[2].Success} {
                 # group 2, items that need `\` escape
