@@ -50,20 +50,20 @@ function ConvertTo-Cson {
     # define a match evaluator for escaping characters
     $escape_replacer = {
         switch ($_) {
-            {$_.Groups[1].Success} {
+            { $_.Groups[1].Success } {
                 # group 1, control characters
                 switch ($_.Value[0]) {
                     <# appearing in order of expected frequency, from most frequent to least frequent #>
-                    ([char]10) {'\n'; continue} # new line
-                    ([char]9) {'\t'; continue}  # tab
-                    ([char]13) {'\r'; continue} # caridge return
-                    ([char]12) {'\f'; continue} # new form
-                    ([char]8) {'\b'; continue}  # bell
-                    default {'\u{0:X4}' -f [int16]$_}   # unicode escape all others
+                    ([char]10) { '\n'; continue } # new line
+                    ([char]9) { '\t'; continue }  # tab
+                    ([char]13) { '\r'; continue } # caridge return
+                    ([char]12) { '\f'; continue } # new form
+                    ([char]8) { '\b'; continue }  # bell
+                    default { '\u{0:X4}' -f [int16]$_ }   # unicode escape all others
                 }
                 continue
             }
-            {$_.Groups[2].Success} {
+            { $_.Groups[2].Success } {
                 # group 2, items that need `\` escape
                 "\$($_.Value)"
             }
@@ -168,7 +168,7 @@ function ConvertTo-Cson {
                 # handle objects by recursing with writeProperty
                 # iterate through the items (force to a PSCustomObject for consistency)
                 foreach ($property in ([PSCustomObject]$item).psobject.Properties) {
-                    writeProperty $property.Name $property.Value $(if ($level -ge 0) {"$indention$Indent"} else {$indention}) ($level + 1)
+                    writeProperty $property.Name $property.Value $(if ($level -ge 0) { "$indention$Indent" } else { $indention }) ($level + 1)
                 }
             }
         }
