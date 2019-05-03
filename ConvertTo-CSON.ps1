@@ -12,7 +12,7 @@
 .PARAMETER EnumsAsStrings
     A switch that specifies an alternate serialization option that converts all enumerations to their string representations.
 .EXAMPLE
-    $grammar_json | ConvertTo-Plist -Indent "`t" -StateEncodingAs 'UTF-8' | Set-Content 'out\PowerShellSyntax.tmLanguage' -Encoding 'UTF8'
+    $grammar_json | ConvertTo-Cson -Indent `t -Depth 100 | Set-Content out\PowerShell.cson -Encoding UTF8
 .INPUTS
     [object] - any PowerShell object.
 .OUTPUTS
@@ -27,14 +27,13 @@
 #>
 function ConvertTo-Cson {
     param(
-        [Parameter(Mandatory = $true,
-            ValueFromPipeline = $true,
-            ValueFromPipelineByPropertyName = $true)]
+        [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)]
         [AllowEmptyCollection()]
         [AllowEmptyString()]
         [AllowNull()]
         [object]$InputObject,
 
+        [PSDefaultValue(Help = 'Tab')]
         [string]$Indent = "`t",
 
         [ValidateRange(1, 100)]
@@ -118,13 +117,13 @@ function ConvertTo-Cson {
                         }
                     } 
                     elseif ($item -isnot [enum]) {
-                        "$item"
+                        $item
                     } 
                     elseif ($EnumsAsStrings) {
                         writeStringValue ($item.ToString())
                     } 
                     else {
-                        "$($item.value__)"
+                        $item.value__
                     }
                 }
             )"
@@ -179,5 +178,5 @@ function ConvertTo-Cson {
     }
 
     # start writing the property list, the property list should be an object, has no name, and starts at base level
-    (writeProperty $null $InputObject '' (-1)) -join "`r`n"
+    (writeProperty $null $InputObject '' (-1)) -join $(if (-not $IsCoreCLR -or $IsWindows) {"`r`n"} else {"`n"})
 }
