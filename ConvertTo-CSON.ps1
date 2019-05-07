@@ -69,30 +69,11 @@ function ConvertTo-Cson {
         }
     }
 
-    function writeStringValue ([string]$value) {
+    filter writeStringValue {
         # write an escaped CSON string property value
         # the purpose of making this a function, is a single place to change the escaping function used
         # TODO: escape more characters!
-        """$($value -replace '([\x00-\x1F\x85\u2028\u2029])|([\\"]|#\{)', $escape_replacer)"""
-    }
-
-    function writePropertyName ([string]$value, [bool]$isArray) {
-        # write an property name, processed as required for CSON
-        # the purpose of making this a function, is a single place to change the escaping function used
-        "$(
-            # if a property name is not all simple characters or start with numeric digit, it must be quoted and escaped
-            if ($value -match '[^\p{L}\d_]|^\d') {
-                # property name requires escaping
-                writeStringValue $value
-            } 
-            else {
-                $value
-            }
-        ):$(
-            if ($isArray) {
-                ' ['
-            }
-        )"
+        """$($_ -replace '([\x00-\x1F\x85\u2028\u2029])|([\\"]|#\{)', $escape_replacer)"""
     }
 
     function writeProperty ([string]$name, $item, [string]$indention, [int32]$level) {
@@ -104,7 +85,7 @@ function ConvertTo-Cson {
             "$indention$(
                 if (($item -is [string]) -or ($item -is [char])) {
                     # handle strings or characters
-                    writeStringValue $item
+                    $item | writeStringValue
                 }
                 else {
                     if ($item -is [boolean]) {
@@ -120,7 +101,7 @@ function ConvertTo-Cson {
                         $item
                     } 
                     elseif ($EnumsAsStrings) {
-                        writeStringValue ($item.ToString())
+                        $item.ToString() | writeStringValue
                     } 
                     else {
                         $item.value__
@@ -133,9 +114,19 @@ function ConvertTo-Cson {
             # write out key name, if one was supplied from the parent object
             if ($name) {
                 "$indention$(
-                    writePropertyName $name ($item -is [array])
-                )$(
-                    if ($item -is [ValueType] -or $item -is [string]) {
+                    # if a property name is not all simple characters or start with numeric digit, it must be quoted and escaped
+                    if ($name -match '[^\p{L}\d_]|^\d') {
+                        # property name requires escaping
+                        $name | writeStringValue
+                    }
+                    else {
+                        $name
+                    }
+                ):$(
+                    if ($item -is [array]) {
+                        ' ['
+                    }
+                    elseif ($item -is [ValueType] -or $item -is [string]) {
                         " $(writeValue $item '')"
                     }
                 )"
@@ -173,10 +164,10 @@ function ConvertTo-Cson {
         }
         else {
             # exceeded maximum depth, convert object to string
-            "$indention$(writeStringValue $item)"
+            "$indention$($item | writeStringValue)"
         }
     }
 
     # start writing the property list, the property list should be an object, has no name, and starts at base level
-    (writeProperty $null $InputObject '' (-1)) -join $(if (-not $IsCoreCLR -or $IsWindows) {"`r`n"} else {"`n"})
+    (writeProperty $null $InputObject '' (-1)) -join $(if (-not $IsCoreCLR -or $IsWindows) { "`r`n" } else { "`n" })
 }
