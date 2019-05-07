@@ -97,10 +97,7 @@ function ConvertTo-Cson {
                             'false'
                         }
                     } 
-                    elseif ($item -isnot [enum]) {
-                        $item
-                    } 
-                    elseif ($EnumsAsStrings) {
+                    elseif ($item -isnot [enum] -or $EnumsAsStrings) {
                         $item.ToString() | writeStringValue
                     } 
                     else {
@@ -110,41 +107,44 @@ function ConvertTo-Cson {
             )"
         }
 
-        if ($level -le $Depth) {
-            # write out key name, if one was supplied from the parent object
-            if ($name) {
-                "$indention$(
-                    # if a property name is not all simple characters or start with numeric digit, it must be quoted and escaped
-                    if ($name -match '[^\p{L}\d_]|^\d') {
-                        # property name requires escaping
-                        $name | writeStringValue
-                    }
-                    else {
-                        $name
-                    }
-                ):$(
-                    if ($item -is [array]) {
-                        ' ['
-                    }
-                    elseif ($item -is [ValueType] -or $item -is [string]) {
-                        " $(writeValue $item '')"
-                    }
-                )"
-            }
-            else {
+        # write out key name, if one was supplied from the parent object
+        if ($name) {
+            "$indention$(
+                # if a property name is not all simple characters or start with numeric digit, it must be quoted and escaped
+                if ($name -match '[^\p{L}\d_]|^\d') {
+                    # property name requires escaping
+                    $name | writeStringValue
+                }
+                else {
+                    $name
+                }
+            ):$(
                 if ($item -is [array]) {
-                    "$indention[" # add array start token if property is an array
+                    ' ['
                 }
-                elseif ($item -is [valuetype] -or $item -is [string]) {
-                    writeValue $item "$indention"
+                elseif ($level -ge $Depth -or $item -is [ValueType] -or $item -is [string]) {
+                    " $(writeValue $item '')"
                 }
+            )"
+        }
+        else {
+            if ($level -lt $Depth -and $item -is [array]) {
+                "$indention[" # add array start token if property is an array
             }
+            elseif ($level -ge $Depth -or $item -is [valuetype] -or $item -is [string]) {
+                writeValue $item "$indention"
+            }
+        }
 
+        if ($level -lt $Depth) {
             if ($item -is [array]) {
                 # handle arrays, iterate through the items in the array
                 foreach ($subitem in $item) {
                     if ($subitem -is [valuetype] -or $subitem -is [string]) {
                         writeValue $subitem "$indention$Indent"
+                    }
+                    elseif ($subitem -is [array]) {
+                        writeProperty $null $subitem "$indention$Indent" ($level + 1)
                     }
                     else {
                         "$indention$indent{"
@@ -161,10 +161,6 @@ function ConvertTo-Cson {
                     writeProperty $property.Name $property.Value $(if ($level -ge 0) { "$indention$Indent" } else { $indention }) ($level + 1)
                 }
             }
-        }
-        else {
-            # exceeded maximum depth, convert object to string
-            "$indention$($item | writeStringValue)"
         }
     }
 
