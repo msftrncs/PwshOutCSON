@@ -83,26 +83,30 @@ function ConvertTo-Cson {
         function writeValue ($item, [string]$indention) {
             # write a property value
             "$indention$(
-                if (($item -is [string]) -or ($item -is [char])) {
-                    # handle strings or characters
-                    $item | writeStringValue
+                if (($item -is [string]) -or ($item -is [char]) -or (($item -is [enum]) -and $EnumsAsStrings) -or ($level -ge $Depth)) {
+                    # handle strings or characters, or objects exceeding the max depth
+                    "$item" | writeStringValue
                 }
-                else {
-                    if ($item -is [boolean]) {
-                        # handle boolean type
-                        if ($item) {
-                            'true'
-                        }
-                        else {
-                            'false'
-                        }
-                    } 
-                    elseif ($item -isnot [enum] -or $EnumsAsStrings) {
-                        $item.ToString() | writeStringValue
-                    } 
-                    else {
-                        $item.value__
+                elseif ($item -is [boolean]) {
+                    # handle boolean type
+                    if ($item) {
+                        'true'
                     }
+                    else {
+                        'false'
+                    }
+                } 
+                elseif ($item -is [datetime]) {
+                    # specifically format date/time to ISO 8601
+                    $item.ToString('o') | writeStringValue
+                } 
+                elseif ($item -isnot [enum]) {
+                    # assuming a [valuetype] that doesn't need special treatment
+                    $item
+                } 
+                else {
+                    # specifically out the enum value
+                    $item.value__
                 }
             )"
         }
@@ -119,19 +123,19 @@ function ConvertTo-Cson {
                     $name
                 }
             ):$(
-                if ($item -is [array]) {
-                    ' ['
+                if (($item -is [array]) -and ($level -lt $Depth)) {
+                    ' [' # add array start token if property is an array
                 }
-                elseif ($level -ge $Depth -or $item -is [ValueType] -or $item -is [string]) {
+                elseif (($item -is [ValueType]) -or ($item -is [string]) -or ($level -ge $Depth)) {
                     " $(writeValue $item '')"
                 }
             )"
         }
         else {
-            if ($level -lt $Depth -and $item -is [array]) {
+            if (($item -is [array]) -and ($level -lt $Depth)) {
                 "$indention[" # add array start token if property is an array
             }
-            elseif ($level -ge $Depth -or $item -is [valuetype] -or $item -is [string]) {
+            elseif (($item -is [valuetype]) -or ($item -is [string]) -or ($level -ge $Depth)) {
                 writeValue $item "$indention"
             }
         }
@@ -140,15 +144,15 @@ function ConvertTo-Cson {
             if ($item -is [array]) {
                 # handle arrays, iterate through the items in the array
                 foreach ($subitem in $item) {
-                    if ($subitem -is [valuetype] -or $subitem -is [string]) {
+                    if (($subitem -is [valuetype]) -or ($subitem -is [string])) {
                         writeValue $subitem "$indention$Indent"
                     }
                     elseif ($subitem -is [array]) {
-                        writeProperty $null $subitem "$indention$Indent" ($level + 1)
+                        writeProperty '' $subitem "$indention$Indent" ($level + 1)
                     }
                     else {
                         "$indention$indent{"
-                        writeProperty $null $subitem "$indention$Indent" ($level + 1)
+                        writeProperty '' $subitem "$indention$Indent" ($level + 1)
                         "$indention$Indent}"
                     }
                 }
@@ -156,14 +160,21 @@ function ConvertTo-Cson {
             }
             elseif ($item -isnot [valuetype] -and $item -isnot [string]) {
                 # handle objects by recursing with writeProperty
-                # iterate through the items (force to a PSCustomObject for consistency)
-                foreach ($property in ([PSCustomObject]$item).psobject.Properties) {
-                    writeProperty $property.Name $property.Value $(if ($level -ge 0) { "$indention$Indent" } else { $indention }) ($level + 1)
+                if ($item.GetType().Name -in 'HashTable', 'OrderedDictionary') {
+                    # process what we assume is a hashtable object
+                    foreach ($hash in $item.GetEnumerator()) {
+                        writeProperty $hash.Key $hash.Value $(if ($level -ge 0) { "$indention$Indent" } else { $indention }) ($level + 1)
+                    }
+                } else {
+                    # iterate through the items (force to a PSCustomObject for consistency)
+                    foreach ($property in ([PSCustomObject]$item).psobject.Properties) {
+                        writeProperty $property.Name $property.Value $(if ($level -ge 0) { "$indention$Indent" } else { $indention }) ($level + 1)
+                    }
                 }
             }
         }
     }
 
     # start writing the property list, the property list should be an object, has no name, and starts at base level
-    (writeProperty $null $InputObject '' (-1)) -join $(if (-not $IsCoreCLR -or $IsWindows) { "`r`n" } else { "`n" })
+    (writeProperty '' $InputObject '' (-1)) -join $(if (-not $IsCoreCLR -or $IsWindows) { "`r`n" } else { "`n" })
 }
