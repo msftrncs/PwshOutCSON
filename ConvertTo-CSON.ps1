@@ -76,105 +76,125 @@ function ConvertTo-Cson {
         """$($_ -replace '([\x00-\x1F\x85\u2028\u2029])|([\\"]|#\{)', $escape_replacer)"""
     }
 
-    function writeProperty ([string]$name, $item, [string]$indention, [int32]$level) {
-        # writing the property may require recursively breaking down the objects based on their type
-        # name of the property is optional, but that is only intended for the first property object
+    function writeObject ($item, [string]$indention, [int32]$level) {
 
-        function writeValue ($item, [string]$indention) {
+        function writeProperty ([string]$name, $value) {
+            # write a property name and its value, which may require recursing back to writeObject
+            "$indention$(
+                    # if a property name is not all simple characters or start with numeric digit, it must be quoted and escaped
+                    if (-not $name -or $name -match '[^\p{L}\d_]|^\d') {
+                        # property name requires escaping
+                        $name | writeStringValue
+                    }
+                    else {
+                        $name
+                    }
+                ):$(
+                    if (($level -gt $Depth) -or ($null -eq $value) -or ($value -is [ValueType]) -or ($value -is [string])) {
+                        " $(, $value | writeValue)"
+                    }
+                    elseif ($value -is [Collections.IList]) {
+                        ' [' # add array start token if value is an array
+                        if (-not (, $value)) {
+                            ']' # add array wnd token if value is an empty array
+                        } 
+                    }
+                )"
+            if ($level -le $Depth) {
+                # if exceeded Depth, value already written above
+                if (($value -is [Collections.IList]) -and (, $value)) {
+                    $level++
+                    $value | writeArray # write the inner object
+                    "$indention]" # array end token
+                } elseif (($value -isnot [ValueType]) -and ($value -isnot [string])) {
+                    writeObject $value $indention$indent $level # recurse the element to writeObject
+                }
+            }
+        }
+
+        filter writeValue {
             # write a property value
-            "$indention$(
-                if (($item -is [string]) -or ($item -is [char]) -or (($item -is [enum]) -and $EnumsAsStrings) -or ($level -ge $Depth)) {
-                    # handle strings or characters, or objects exceeding the max depth
-                    "$item" | writeStringValue
+            if ($null -eq $_) {
+                'null'
+            } elseif (($_ -is [char]) -or ($EnumsAsStrings -and ($_ -is [enum])) -or $_ -isnot [ValueType]) {
+                # handle strings or characters, or objects exceeding the max depth
+                "$_" | writeStringValue
+            } elseif ($_ -is [boolean]) {
+                # handle boolean type
+                if ($_) {
+                    'true'
+                } else {
+                    'false'
                 }
-                elseif ($item -is [boolean]) {
-                    # handle boolean type
-                    if ($item) {
-                        'true'
-                    }
-                    else {
-                        'false'
-                    }
-                } 
-                elseif ($item -is [datetime]) {
-                    # specifically format date/time to ISO 8601
-                    $item.ToString('o') | writeStringValue
-                } 
-                elseif ($item -isnot [enum]) {
-                    # assuming a [valuetype] that doesn't need special treatment
-                    $item
-                } 
-                else {
-                    # specifically out the enum value
-                    $item.value__
-                }
-            )"
-        }
-
-        # write out key name, if one was supplied from the parent object
-        if ($name) {
-            "$indention$(
-                # if a property name is not all simple characters or start with numeric digit, it must be quoted and escaped
-                if ($name -match '[^\p{L}\d_]|^\d') {
-                    # property name requires escaping
-                    $name | writeStringValue
-                }
-                else {
-                    $name
-                }
-            ):$(
-                if (($item -is [array]) -and ($level -lt $Depth)) {
-                    ' [' # add array start token if property is an array
-                }
-                elseif (($item -is [ValueType]) -or ($item -is [string]) -or ($level -ge $Depth)) {
-                    " $(writeValue $item '')"
-                }
-            )"
-        }
-        else {
-            if (($item -is [array]) -and ($level -lt $Depth)) {
-                "$indention[" # add array start token if property is an array
-            }
-            elseif (($item -is [valuetype]) -or ($item -is [string]) -or ($level -ge $Depth)) {
-                writeValue $item "$indention"
+            } elseif ($_ -is [datetime]) {
+                # specifically format date/time to ISO 8601
+                $_.ToString('o') | writeStringValue
+            } elseif ($_ -isnot [enum]) {
+                # assuming a [valuetype] that doesn't need special treatment
+                $_
+            } else {
+                # specifically out the enum value
+                $_.value__
             }
         }
 
-        if ($level -lt $Depth) {
-            if ($item -is [array]) {
-                # handle arrays, iterate through the items in the array
-                foreach ($subitem in $item) {
-                    if (($subitem -is [valuetype]) -or ($subitem -is [string])) {
-                        writeValue $subitem "$indention$Indent"
-                    }
-                    elseif ($subitem -is [array]) {
-                        writeProperty '' $subitem "$indention$Indent" ($level + 1)
-                    }
-                    else {
-                        "$indention$indent{"
-                        writeProperty '' $subitem "$indention$Indent" ($level + 1)
-                        "$indention$Indent}"
-                    }
+        filter writeArray  {
+            # increase level, if depth not exceeded, check for a nested object
+            if (($level -le $Depth) -and $_ -and ($_ -isnot [ValueType]) -and ($_ -isnot [string]) -and ($_ -isnot [Collections.IList])) {
+                # an object is nested within the array element
+                if ($_ -and $(if ($_ -is [Collections.IDictionary]) { $_.get_Keys().Count } else { @($_.psobject.get_Properties()).Count } ) -gt 0) {
+                    "$indention$indent{" # object start token
+                    writeObject $_ $indention$indent$indent $level # recurse the object to writeObject
+                    "$indention$indent}" # object end token
+                } else {
+                    "$indention$indent{}" # empty object
                 }
-                "$indention]"
+            } else {
+                writeObject $_ $indention$indent $level # recurse the element to writeObject
             }
-            elseif ($item -isnot [valuetype] -and $item -isnot [string]) {
-                # handle objects by recursing with writeProperty
-                if ($item.GetType().Name -in 'HashTable', 'OrderedDictionary') {
+        }
+
+        if (($level -gt $Depth) -or ($null -eq $item) -or ($item -is [ValueType]) -or ($item -is [string])) {
+            "$indention$(, $item | writeValue)"
+        } else {
+            $level++
+            if ($item -is [Collections.IList]) {
+                if (, $item) {
+                    # handle arrays, iterate through the items in the array
+                    "$indention[" # add array start token
+                    $item | writeArray
+                    "$indention]"
+                } else {
+                    "$indention[]" # empty array
+                }
+            } elseif ($item -and $(if($item -is [Collections.IDictionary]) { $item.get_Keys().Count } else { @($item.psobject.get_Properties()).Count } ) -gt 0) {
+                if ($item -is [Collections.IDictionary]) {
                     # process what we assume is a hashtable object
-                    foreach ($hash in $item.GetEnumerator()) {
-                        writeProperty $hash.Key $hash.Value $(if ($level -ge 0) { "$indention$Indent" } else { $indention }) ($level + 1)
+                    foreach ($key in $item.get_Keys()) {
+                        # handle objects by recursing with writeProperty
+                        writeProperty $key $item[$key]
                     }
                 } else {
-                    # iterate through the items (force to a PSCustomObject for consistency)
-                    foreach ($property in ([PSCustomObject]$item).psobject.Properties) {
-                        writeProperty $property.Name $property.Value $(if ($level -ge 0) { "$indention$Indent" } else { $indention }) ($level + 1)
+                    # iterate through the objects properties
+                    foreach ($property in $item.psobject.Properties) {
+                        # handle objects by recursing with writeProperty
+                        writeProperty $property.Name $property.Value
                     }
                 }
+            } else {
+                "$indention{}" # empty object
             }
         }
     }
 
-    # start writing the property list, the property list should be an object, has no name, and starts at base level
-    (writeProperty '' $InputObject '' (-1)) -join $(if (-not $IsCoreCLR -or $IsWindows) { "`r`n" } else { "`n" })
+    # start writing the input object starting with no indent at level 0
+    (writeObject $(
+                # we need to determine where our input is coming from, pipeline or parameter argument.
+                if ($input -is [array] -and $input.Length -ne 0) {
+                    $input # input from pipeline
+                } else {
+                    $InputObject # input from parameter argument
+                }
+            ) '' 0
+        ) -join "$(if (-not $IsCoreCLR -or $IsWindows) { "`r" })`n"
 }
