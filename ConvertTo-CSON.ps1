@@ -76,39 +76,41 @@ function ConvertTo-Cson {
         """$($_ -replace '([\x00-\x1F\x85\u2028\u2029])|([\\"]|#\{)', $escape_replacer)"""
     }
 
-    function writeObject ($item, [string] $indention) {
+    function writeObject ($item) {
 
         function writeProperty ([string] $name, $value) {
             # write a property name and its value, which may require recursing back to writeObject
             "$indention$(
-                    # if a property name is not all simple characters or starts with numeric digit, it must be quoted and escaped
-                    if (-not $name -or $name -match '[^\p{L}\d_]|^\d') {
-                        # property name requires escaping
-                        $name | writeStringValue
-                    }
-                    else {
-                        $name
-                    }
-                ):$(
-                    if (($level -gt $Depth) -or ($null -eq $value) -or ($value -is [ValueType]) -or ($value -is [string])) {
-                        " $(, $value | writeValue)" # comma forces $value to be treated as a whole object instead of being enumerated as subitems
-                    }
-                    elseif ($value -is [Collections.IList]) {
-                        ' [' # add array start token if value is an array
-                        if (-not (, $value)) {
-                            ']' # add array end token if value is an empty array
-                        } 
-                    }
-                )"
+                        # if a property name is not all simple characters or starts with numeric digit, it must be quoted and escaped
+                        if (-not $name -or $name -match '[^\p{L}\d_]|^\d') {
+                            # property name requires escaping
+                            $name | writeStringValue
+                        }
+                        else {
+                            $name
+                        }
+                    ):$(
+                        if (($level -gt $Depth) -or ($null -eq $value) -or ($value -is [ValueType]) -or ($value -is [string])) {
+                            " $(, $value | writeValue)" # comma forces $value to be treated as a whole object instead of being enumerated as subitems
+                        }
+                        elseif ($value -is [Collections.IList]) {
+                            " [$( # add array start token if value is an array
+                                    if ($value.Count -eq 0) {
+                                        ']' # add array end token if value is an empty array
+                                    }
+                                )"
+                        }
+                    )"
             if ($level -le $Depth) {
                 # if exceeded Depth, value already written above
-                if (($value -is [Collections.IList]) -and (, $value)) {
+                if (($value -is [Collections.IList]) -and ($value.Count -ne 0)) {
                     # handle nested non-empty arrays specially due to already emitted array start token
                     $level++ # level increases for arrays or objects
                     $value | writeArray # write the nested array
                     "$indention]" # nested array end token
-                } elseif (($value -isnot [ValueType]) -and ($value -isnot [string])) {
-                    writeObject $value $indention$indent # recurse the element to writeObject
+                } elseif ($value -and ($value -isnot [ValueType]) -and ($value -isnot [string])) {
+                    $indention = "$indention$Indent"
+                    writeObject $value # recurse the element to writeObject
                 }
             }
         }
@@ -140,18 +142,26 @@ function ConvertTo-Cson {
         }
 
         filter writeArray {
-            # if depth not exceeded, check for a nested object
-            if (($level -le $Depth) -and $_ -and ($_ -isnot [ValueType]) -and ($_ -isnot [string]) -and ($_ -isnot [Collections.IList])) {
-                # an object is nested within the array element
-                if ($_ -and $(if ($_ -is [Collections.IDictionary]) { $_.get_Keys().Count } else { @($_.psobject.get_Properties()).Count } ) -gt 0) {
-                    "$indention$indent{" # object start token
-                    writeObject $_ $indention$indent$indent # recurse the object to writeObject
-                    "$indention$indent}" # object end token
+            begin {
+                $indentionArray = "$indention$Indent"
+            }
+            process {
+                # if depth not exceeded, check for a nested object
+                if (($level -le $Depth) -and $_ -and ($_ -isnot [ValueType]) -and ($_ -isnot [string]) -and ($_ -isnot [Collections.IList])) {
+                    # an object is nested within the array element
+                    if ($(if ($_ -is [Collections.IDictionary]) { $_.get_Keys().Count } else { @($_.psobject.get_Properties()).Count } ) -gt 0) {
+                        "$indentionArray{" # object start token
+                        $indention = "$indentionArray$Indent"
+                        writeObject $_ # recurse the object to writeObject
+                        "$indentionArray}" # object end token
+                    } else {
+                        "$indentionArray{}" # empty object
+                    }
                 } else {
-                    "$indention$indent{}" # empty object
+                    # for all other cases recurse the value back to writeObject
+                    $indention = $indentionArray
+                    writeObject $_
                 }
-            } else {
-                writeObject $_ $indention$indent # recurse the element to writeObject
             }
         }
 
@@ -160,7 +170,7 @@ function ConvertTo-Cson {
         } else {
             $level++ # level increases for arrays or objects
             if ($item -is [Collections.IList]) {
-                if (, $item) {
+                if ($item.Count -ne 0) {
                     # handle non-empty arrays, iterate through the items in the array
                     "$indention["
                     $item | writeArray
@@ -168,7 +178,7 @@ function ConvertTo-Cson {
                 } else {
                     "$indention[]" # indicate empty array
                 }
-            } elseif ($item -and $(if($item -is [Collections.IDictionary]) { $item.get_Keys().Count } else { @($item.psobject.get_Properties()).Count } ) -gt 0) {
+            } elseif ($(if($item -is [Collections.IDictionary]) { $item.get_Keys().Count } else { @($item.psobject.get_Properties()).Count } ) -gt 0) {
                 if ($item -is [Collections.IDictionary]) {
                     # process what we assume is a hashtable object
                     foreach ($key in $item.get_Keys()) {
@@ -189,6 +199,7 @@ function ConvertTo-Cson {
     }
 
     # start writing the input object starting with no indent at level 0
+    [string] $indention = ''
     [int32] $level = 0
     (writeObject $(
                 # we need to determine where our input is coming from, pipeline or parameter argument.
