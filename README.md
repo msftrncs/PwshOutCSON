@@ -27,7 +27,7 @@ $grammar_cson_doc = Get-Content powershell.tmlanguage.json | ConvertFrom-Json |
 
 #### InputObject
 
-The PowerShell object which possesses the items to be output in CSON notation.  This can be any object that can be represented as a PSCustomObject.  This parameter may be received from the pipeline.
+The PowerShell object which possesses the items to be output in CSON notation.  This can be any object that can be represented as a PSCustomObject.  Hashtables with empty keys are also accepted.  This parameter may be received from the pipeline.
 
 #### Indent
 
