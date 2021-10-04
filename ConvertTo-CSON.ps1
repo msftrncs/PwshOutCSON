@@ -48,24 +48,20 @@ function ConvertTo-Cson {
 
     # define a match evaluator for escaping characters
     $escape_replacer = {
-        switch ($_) {
-            { $_.Groups[1].Success } {
-                # group 1, control characters
-                switch ($_.Value[0]) {
-                    <# appearing in order of expected frequency, from most frequent to least frequent #>
-                    ([char]10) { '\n'; continue } # new line
-                    ([char]9) { '\t'; continue }  # tab
-                    ([char]13) { '\r'; continue } # caridge return
-                    ([char]12) { '\f'; continue } # new form
-                    ([char]8) { '\b'; continue }  # bell
-                    default { '\u{0:X4}' -f [int16]$_ }   # unicode escape all others
-                }
-                continue
+        if ($_.Groups[1].Success) {
+            # group 1, control characters
+            switch ($_.Value[0]) {
+                <# appearing in order of expected frequency, from most frequent to least frequent #>
+                ([char]10) { '\n'; continue } # new line
+                ([char]9) { '\t'; continue }  # tab
+                ([char]13) { '\r'; continue } # caridge return
+                ([char]12) { '\f'; continue } # new form
+                ([char]8) { '\b'; continue }  # bell
+                default { '\u{0:X4}' -f [int16]$_ }   # unicode escape all others
             }
-            { $_.Groups[2].Success } {
-                # group 2, items that need `\` escape
-                "\$($_.Value)"
-            }
+        } elseif ($_.Groups[2].Success) {
+            # group 2, items that need `\` escape
+            "\$($_.Value)"
         }
     }
 
