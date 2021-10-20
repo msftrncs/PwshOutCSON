@@ -204,6 +204,6 @@ function ConvertTo-Cson {
                 } else {
                     $InputObject # input from parameter argument
                 }
-            ) ''
+            )
         ) -join "$(if (-not $IsCoreCLR -or $IsWindows) { "`r" })`n"
 }
