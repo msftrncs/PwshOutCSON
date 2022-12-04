@@ -86,7 +86,7 @@ function ConvertTo-Cson {
                             $name
                         }
                     ):$(
-                        if (($level -gt $Depth) -or ($null -eq $value) -or ($value -is [ValueType]) -or ($value -is [string])) {
+                        if (($level -gt $Depth) -or ($null -eq $value) -or ($value -is [valuetype]) -or ($value -is [string])) {
                             " $(, $value | writeValue)" # comma forces $value to be treated as a whole object instead of being enumerated as subitems
                         }
                         elseif ($value -is [Collections.IList]) {
@@ -104,7 +104,7 @@ function ConvertTo-Cson {
                     $level++ # level increases for arrays or objects
                     $value | writeArray # write the nested array
                     "$indention]" # nested array end token
-                } elseif ($value -and ($value -isnot [ValueType]) -and ($value -isnot [string])) {
+                } elseif ($value -and ($value -isnot [valuetype]) -and ($value -isnot [string])) {
                     $indention = "$indention$Indent"
                     writeObject $value # recurse the element to writeObject
                 }
@@ -115,7 +115,7 @@ function ConvertTo-Cson {
             # write a object property or array element simple value
             if ($null -eq $_) {
                 'null'
-            } elseif (($_ -is [char]) -or ($EnumsAsStrings -and ($_ -is [enum])) -or ($_ -isnot [ValueType])) {
+            } elseif (($_ -is [char]) -or ($EnumsAsStrings -and ($_ -is [enum])) -or ($_ -isnot [valuetype])) {
                 # handle strings or characters, or objects exceeding the max depth
                 "$_" | writeStringValue
             } elseif ($_ -is [boolean]) {
@@ -143,7 +143,7 @@ function ConvertTo-Cson {
             }
             process {
                 # if depth not exceeded, check for a nested object
-                if (($level -le $Depth) -and $_ -and ($_ -isnot [ValueType]) -and ($_ -isnot [string]) -and ($_ -isnot [Collections.IList])) {
+                if (($level -le $Depth) -and $_ -and ($_ -isnot [valuetype]) -and ($_ -isnot [string]) -and ($_ -isnot [Collections.IList])) {
                     # an object is nested within the array element
                     if ($(if ($_ -is [Collections.IDictionary]) { $_.get_Keys().Count } else { @($_.psobject.get_Properties()).Count } ) -gt 0) {
                         "$indentionArray{" # object start token
@@ -161,7 +161,7 @@ function ConvertTo-Cson {
             }
         }
 
-        if (($level -gt $Depth) -or ($null -eq $item) -or ($item -is [ValueType]) -or ($item -is [string])) {
+        if (($level -gt $Depth) -or ($null -eq $item) -or ($item -is [valuetype]) -or ($item -is [string])) {
             "$indention$(, $item | writeValue)" # comma forces $item to be treated as a whole object instead of being enumerated as subitems
         } else {
             $level++ # level increases for arrays or objects
