@@ -46,11 +46,14 @@ function ConvertTo-Cson {
     # $Indent is a string representing the indentation to use.
     #   Typically use "`t" or "  ".
 
-    # define a match evaluator for escaping characters
+    # define a match evaluator delegate for escaping characters
     $escape_replacer = {
-        if ($args[0].Groups[1].Success) {
+        param(
+            [Text.RegularExpressions.Match] $RepMatch
+        )
+        if ($RepMatch.Groups[1].Success) {
             # group 1, control characters
-            switch ($args[0].Value[0]) {
+            switch ($RepMatch.Value[0]) {
                 <# appearing in order of expected frequency, from most frequent to least frequent #>
                 ([char]10) { '\n'; continue } # new line
                 ([char]9) { '\t'; continue }  # tab
@@ -59,9 +62,9 @@ function ConvertTo-Cson {
                 ([char]8) { '\b'; continue }  # backspace
                 default { '\u{0:X4}' -f [int16]$_ }   # unicode escape all others
             }
-        } elseif ($args[0].Groups[2].Success) {
+        } elseif ($RepMatch.Groups[2].Success) {
             # group 2, items that need `\` escape
-            "\$($args[0].Value)"
+            "\$($RepMatch.Value)"
         }
     }
 
