@@ -56,7 +56,7 @@ function ConvertTo-Cson {
                 ([char]9) { '\t'; continue }  # tab
                 ([char]13) { '\r'; continue } # carriage return
                 ([char]12) { '\f'; continue } # new form
-                ([char]8) { '\b'; continue }  # bell
+                ([char]8) { '\b'; continue }  # backspace
                 default { '\u{0:X4}' -f [int16]$_ }   # unicode escape all others
             }
         } elseif ($args[0].Groups[2].Success) {
