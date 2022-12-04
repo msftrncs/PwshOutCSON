@@ -54,7 +54,7 @@ function ConvertTo-Cson {
                 <# appearing in order of expected frequency, from most frequent to least frequent #>
                 ([char]10) { '\n'; continue } # new line
                 ([char]9) { '\t'; continue }  # tab
-                ([char]13) { '\r'; continue } # caridge return
+                ([char]13) { '\r'; continue } # carriage return
                 ([char]12) { '\f'; continue } # new form
                 ([char]8) { '\b'; continue }  # bell
                 default { '\u{0:X4}' -f [int16]$_ }   # unicode escape all others
