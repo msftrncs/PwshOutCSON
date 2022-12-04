@@ -48,9 +48,9 @@ function ConvertTo-Cson {
 
     # define a match evaluator for escaping characters
     $escape_replacer = {
-        if ($_.Groups[1].Success) {
+        if ($args[0].Groups[1].Success) {
             # group 1, control characters
-            switch ($_.Value[0]) {
+            switch ($args[0].Value[0]) {
                 <# appearing in order of expected frequency, from most frequent to least frequent #>
                 ([char]10) { '\n'; continue } # new line
                 ([char]9) { '\t'; continue }  # tab
@@ -59,9 +59,9 @@ function ConvertTo-Cson {
                 ([char]8) { '\b'; continue }  # bell
                 default { '\u{0:X4}' -f [int16]$_ }   # unicode escape all others
             }
-        } elseif ($_.Groups[2].Success) {
+        } elseif ($args[0].Groups[2].Success) {
             # group 2, items that need `\` escape
-            "\$($_.Value)"
+            "\$($args[0].Value)"
         }
     }
 
@@ -69,7 +69,7 @@ function ConvertTo-Cson {
         # write an escaped CSON string property value
         # the purpose of making this a function, is a single place to change the escaping function used
         # TODO: escape more characters!
-        """$($_ -replace '([\x00-\x1F\x85\u2028\u2029])|([\\"]|#\{)', $escape_replacer)"""
+        """$([regex]::Replace($_, '([\x00-\x1F\x85\u2028\u2029])|([\\"]|#\{)', $escape_replacer))"""
     }
 
     function writeObject ($item) {
