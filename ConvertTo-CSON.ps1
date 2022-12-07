@@ -46,22 +46,25 @@ function ConvertTo-Cson {
     # $Indent is a string representing the indentation to use.
     #   Typically use "`t" or "  ".
 
-    # define a match evaluator for escaping characters
+    # define a match evaluator delegate for escaping characters
     $escape_replacer = {
-        if ($_.Groups[1].Success) {
+        param(
+            [Text.RegularExpressions.Match] $RepMatch
+        )
+        if ($RepMatch.Groups[1].Success) {
             # group 1, control characters
-            switch ($_.Value[0]) {
+            switch ($RepMatch.Value[0]) {
                 <# appearing in order of expected frequency, from most frequent to least frequent #>
                 ([char]10) { '\n'; continue } # new line
                 ([char]9) { '\t'; continue }  # tab
-                ([char]13) { '\r'; continue } # caridge return
+                ([char]13) { '\r'; continue } # carriage return
                 ([char]12) { '\f'; continue } # new form
-                ([char]8) { '\b'; continue }  # bell
+                ([char]8) { '\b'; continue }  # backspace
                 default { '\u{0:X4}' -f [int16]$_ }   # unicode escape all others
             }
-        } elseif ($_.Groups[2].Success) {
+        } elseif ($RepMatch.Groups[2].Success) {
             # group 2, items that need `\` escape
-            "\$($_.Value)"
+            "\$($RepMatch.Value)"
         }
     }
 
@@ -69,7 +72,7 @@ function ConvertTo-Cson {
         # write an escaped CSON string property value
         # the purpose of making this a function, is a single place to change the escaping function used
         # TODO: escape more characters!
-        """$($_ -replace '([\x00-\x1F\x85\u2028\u2029])|([\\"]|#\{)', $escape_replacer)"""
+        """$([regex]::Replace($_, '([\x00-\x1F\x85\u2028\u2029])|([\\"]|#\{)', $escape_replacer))"""
     }
 
     function writeObject ($item) {
@@ -86,7 +89,7 @@ function ConvertTo-Cson {
                             $name
                         }
                     ):$(
-                        if (($level -gt $Depth) -or ($null -eq $value) -or ($value -is [ValueType]) -or ($value -is [string])) {
+                        if (($level -gt $Depth) -or ($null -eq $value) -or ($value -is [valuetype]) -or ($value -is [string])) {
                             " $(, $value | writeValue)" # comma forces $value to be treated as a whole object instead of being enumerated as subitems
                         }
                         elseif ($value -is [Collections.IList]) {
@@ -104,7 +107,7 @@ function ConvertTo-Cson {
                     $level++ # level increases for arrays or objects
                     $value | writeArray # write the nested array
                     "$indention]" # nested array end token
-                } elseif ($value -and ($value -isnot [ValueType]) -and ($value -isnot [string])) {
+                } elseif ($value -and ($value -isnot [valuetype]) -and ($value -isnot [string])) {
                     $indention = "$indention$Indent"
                     writeObject $value # recurse the element to writeObject
                 }
@@ -115,7 +118,7 @@ function ConvertTo-Cson {
             # write a object property or array element simple value
             if ($null -eq $_) {
                 'null'
-            } elseif (($_ -is [char]) -or ($EnumsAsStrings -and ($_ -is [enum])) -or ($_ -isnot [ValueType])) {
+            } elseif (($_ -is [char]) -or ($EnumsAsStrings -and ($_ -is [enum])) -or ($_ -isnot [valuetype])) {
                 # handle strings or characters, or objects exceeding the max depth
                 "$_" | writeStringValue
             } elseif ($_ -is [boolean]) {
@@ -143,7 +146,7 @@ function ConvertTo-Cson {
             }
             process {
                 # if depth not exceeded, check for a nested object
-                if (($level -le $Depth) -and $_ -and ($_ -isnot [ValueType]) -and ($_ -isnot [string]) -and ($_ -isnot [Collections.IList])) {
+                if (($level -le $Depth) -and $_ -and ($_ -isnot [valuetype]) -and ($_ -isnot [string]) -and ($_ -isnot [Collections.IList])) {
                     # an object is nested within the array element
                     if ($(if ($_ -is [Collections.IDictionary]) { $_.get_Keys().Count } else { @($_.psobject.get_Properties()).Count } ) -gt 0) {
                         "$indentionArray{" # object start token
@@ -161,7 +164,7 @@ function ConvertTo-Cson {
             }
         }
 
-        if (($level -gt $Depth) -or ($null -eq $item) -or ($item -is [ValueType]) -or ($item -is [string])) {
+        if (($level -gt $Depth) -or ($null -eq $item) -or ($item -is [valuetype]) -or ($item -is [string])) {
             "$indention$(, $item | writeValue)" # comma forces $item to be treated as a whole object instead of being enumerated as subitems
         } else {
             $level++ # level increases for arrays or objects
@@ -205,5 +208,5 @@ function ConvertTo-Cson {
                     $InputObject # input from parameter argument
                 }
             )
-        ) -join "$(if (-not $IsCoreCLR -or $IsWindows) { "`r" })`n"
+        ) -join "$(if (-not $local:IsCoreCLR -or $local:IsWindows) { "`r" })`n"
 }
