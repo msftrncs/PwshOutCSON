@@ -31,7 +31,7 @@ function ConvertTo-Cson {
         [AllowEmptyCollection()]
         [AllowEmptyString()]
         [AllowNull()]
-        [object] $InputObject,
+        [Object] $InputObject,
 
         [PSDefaultValue(Help = 'Tab')]
         [string] $Indent = "`t",
@@ -89,7 +89,7 @@ function ConvertTo-Cson {
                             $name
                         }
                     ):$(
-                        if (($level -gt $Depth) -or ($null -eq $value) -or ($value -is [valuetype]) -or ($value -is [string])) {
+                        if (($null -eq $value) -or ($value -is [valuetype]) -or ($value -is [string]) -or (WarnDepthExceeded ($level -gt $Depth))) {
                             " $(, $value | writeValue)" # comma forces $value to be treated as a whole object instead of being enumerated as subitems
                         }
                         elseif ($value -is [Collections.IList]) {
@@ -164,7 +164,27 @@ function ConvertTo-Cson {
             }
         }
 
-        if (($level -gt $Depth) -or ($null -eq $item) -or ($item -is [valuetype]) -or ($item -is [string])) {
+        function WarnInfRecursion ([bool] $InfRecursionDetected) {
+            if ($InfRecursionDetected) {
+                if (-not $script:InfRecursionDetected) {
+                    $script:InfRecursionDetected = $true
+                    Write-Warning 'Resulting CSON is truncated as serialization would result in infinite recursion.'
+                }
+            }
+            return $InfRecursionDetected
+        }
+
+        function WarnDepthExceeded ([bool] $DepthExceeded) {
+            if ($DepthExceeded) {
+                if (-not $script:DepthExceeded) {
+                    $script:DepthExceeded = $true
+                    Write-Warning "Resulting CSON is truncated as serialization has exceeded the set depth of $Depth."
+                }
+            }
+            return $DepthExceeded
+        }
+
+        if (($null -eq $item) -or ($item -is [valuetype]) -or ($item -is [string]) -or (WarnDepthExceeded ($level -gt $Depth)) -or (WarnInfRecursion (-not $recurseTree.Add($item)))) {
             "$indention$(, $item | writeValue)" # comma forces $item to be treated as a whole object instead of being enumerated as subitems
         } else {
             $level++ # level increases for arrays or objects
@@ -194,12 +214,16 @@ function ConvertTo-Cson {
             } else {
                 "$indention{}" # indicate empty object
             }
+            $null = $recurseTree.Remove($item)
         }
     }
 
     # start writing the input object starting with no indent at level 0
     [string] $indention = ''
     [int32] $level = 0
+    $recurseTree = [Collections.Generic.HashSet[Object]]::new();
+    [bool] $script:InfRecursionDetected = $false
+    [bool] $script:DepthExceeded = $false
     (writeObject $(
                 # we need to determine where our input is coming from, pipeline or parameter argument.
                 if ($input -is [array] -and $input.Length -ne 0) {
